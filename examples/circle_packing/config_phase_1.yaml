@@ -11,7 +11,7 @@ llm:
   secondary_model_weight: 0.0
   api_base: "https://openrouter.ai/api/v1"
   # api_base: "https://api.cerebras.ai/v1"
-  api_key: ${RUNNING_AGENTS}
+  api_key: ${OPENROUTER_API_KEY}
   temperature: 0.7
   top_p: 0.95
   max_tokens: 8192
