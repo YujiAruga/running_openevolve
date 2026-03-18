@@ -62,6 +62,6 @@ def parse_openevolve_logs(log_file_path, output_csv):
     print(f"Successfully extracted {len(data_points)} data points to {output_csv}")
 
 # Usage
-log_path = "examples/graph_coloring/openevolve_output/logs/openevolve_20260317_221521.log"
-output_path = "examples/graph_coloring/openevolve_output/fitness_history.csv"
+log_path = "examples/knapsack/openevolve_output/logs/openevolve_20260318_012146.log"
+output_path = "examples/knapsack/openevolve_output/fitness_history.csv"
 parse_openevolve_logs(log_path, output_path)

@@ -37,6 +37,17 @@ def plot_fitness(task_name):
     y_highs = df.loc[is_new_high, "Best_Fitness"]
     plt.scatter(x_highs, y_highs, color='red', label='New Record High', zorder=3, s=40)
 
+    for i in range(len(y_highs)):
+        plt.annotate(
+            f"{y_highs.iloc[i]:.2f}",           # Format to 2 decimal places
+            (x_highs.iloc[i], y_highs.iloc[i]), # Access coordinates by position
+            textcoords="offset points", 
+            xytext=(0, 7), 
+            ha='center', 
+            fontsize=8, 
+            color='black'
+        )
+
     # 4. Format the graph
     plt.title(f"Evolutionary Optimization Progress: {task_name}\nModel: {model_name}", fontsize=14, pad=15)
     plt.xlabel("Generation")

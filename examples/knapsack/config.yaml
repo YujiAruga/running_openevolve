@@ -1,0 +1,34 @@
+# OpenEvolve Configuration for Knapsack Packing
+
+max_iterations: 150
+checkpoint_interval: 10
+log_level: "INFO"
+output_dir: "examples/knapsack/openevolve_output"
+
+llm:
+  models:
+    - name: "openai/gpt-oss-20b"
+      weight: 1.0
+  
+  evaluator_models:
+    - name: "openai/gpt-oss-20b"
+      weight: 1.0
+
+  api_base: "https://openrouter.ai/api/v1"
+  api_key: ${OPENROUTER_API_KEY}
+  temperature: 0.7
+  top_p: 0.95
+  max_tokens: 4096
+
+evolution:
+  diff_based_evolution: true
+  max_code_length: 10000
+
+database:
+  type: "map-elites"
+  n_islands: 4
+  grid_size: 10
+
+evaluation:
+  n_workers: 4
+  timeout_seconds: 30
