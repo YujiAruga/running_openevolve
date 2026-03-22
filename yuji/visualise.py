@@ -39,7 +39,7 @@ def plot_fitness(task_name):
 
     for i in range(len(y_highs)):
         plt.annotate(
-            f"{y_highs.iloc[i]:.2f}",           # Format to 2 decimal places
+            f"{y_highs.iloc[i]:.5f}",           # Format to 2 decimal places
             (x_highs.iloc[i], y_highs.iloc[i]), # Access coordinates by position
             textcoords="offset points", 
             xytext=(0, 7), 

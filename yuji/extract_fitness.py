@@ -5,8 +5,8 @@ import os
 def parse_openevolve_logs(log_file_path, output_csv):
     # Regex patterns
     iter_pattern = re.compile(r"Iteration (\d+):")
-    metrics_pattern = re.compile(r"Metrics:.*sum_radii=([\d.]+)")
-    initial_pattern = re.compile(r"Evaluated program .* sum_radii=([\d.]+)")
+    metrics_pattern = re.compile(r"Metrics:.*score=([\d.]+)")
+    initial_pattern = re.compile(r"Evaluated program .* score=([\d.]+)")
 
     data_points = []
     best_score = float('-inf')
@@ -21,19 +21,26 @@ def parse_openevolve_logs(log_file_path, output_csv):
         
         for line in f:
             # 1. Handle Initial Program (Iteration 0)
-            if not initial_found:
-                initial_match = initial_pattern.search(line)
-                if initial_match:
-                    score = float(initial_match.group(1))
-                    best_score = max(best_score, score)
-                    data_points.append({'Generation': 0, 'Current_Fitness': score, 'Best_Fitness': best_score})
-                    initial_found = True
-                    continue
+            initial_match = initial_pattern.search(line)
+            if initial_match and not initial_found:
+                score = float(initial_match.group(1))
+                best_score = max(best_score, score)
+                data_points.append({'Generation': 0, 'Current_Fitness': score, 'Best_Fitness': best_score})
+                initial_found = True
+                continue
 
             # 2. Capture Iteration Number
             iter_match = iter_pattern.search(line)
             if iter_match:
                 last_iter_num = int(iter_match.group(1))
+                if "error" in line.lower() or "failed" in line.lower():
+                    # Record a 0 for failed iterations so the count is correct
+                    data_points.append({
+                        'Generation': last_iter_num, 
+                        'Current_Fitness': 0.0, 
+                        'Best_Fitness': best_score
+                    })
+                    last_iter_num = None
                 continue
 
             # 3. Capture Metrics (linked to the last seen Iteration Number)
@@ -61,6 +68,6 @@ def parse_openevolve_logs(log_file_path, output_csv):
     print(f"Successfully extracted {len(data_points)} data points to {output_csv}")
 
 # Updated path based on your latest log snippet
-log_path = "examples/circle_packing/openevolve_output/checkpoints/checkpoint_100/openevolve_output/logs/openevolve_20260312_161659.log"
-output_path = "examples/circle_packing/openevolve_output/fitness_history.csv"
+log_path = "examples/tsp/openevolve_output/logs/openevolve_20260321_233628.log"
+output_path = "examples/tsp/openevolve_output/fitness_history.csv"
 parse_openevolve_logs(log_path, output_path)
