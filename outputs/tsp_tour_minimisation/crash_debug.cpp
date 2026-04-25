@@ -1,8 +1,9 @@
 #include <iostream>
 #include <vector>
-#include <cmath>
+
 #include <algorithm>
 #include <random>
+#include <limits>
 #include <chrono>
 
 using namespace std;
@@ -13,45 +14,120 @@ struct Point {
 
 // Helper: Euclidean distance
 double dist(const Point& a, const Point& b) {
-    return sqrt(pow(a.x - b.x, 2) + pow(a.y - b.y, 2));
+    double dx = a.x - b.x;
+    double dy = a.y - b.y;
+    return sqrt(dx*dx + dy*dy);
 }
 
-// Helper: Calculate the total cost of the closed loop
-double get_tour_distance(int N, const vector<int>& tour, const vector<Point>& cities) {
-    double total = 0;
-    for (int i = 0; i < N; i++) {
-        total += dist(cities[tour[i]], cities[tour[(i + 1) % N]]);
+// Euclidean distance with sqrt
+# Remove unused helper
+
+# remove unused improve_2opt function
+
+double tour_distance(const vector<int>& tour, const vector<Point>& cities) {
+    double total = 0.0;
+    int N = tour.size();
+    for (int i = 0; i < N; ++i) {
+        total += dist(cities[tour[i]], cities[tour[(i+1)%N]]);
     }
     return total;
 }
+
 
 // EVOLVE-BLOCK-START
 vector<int> solve_tsp(int N, const vector<Point>& cities) {
     if (N == 0) return {};
     
-    // 1. Initial Greedy Tour (Nearest Neighbor)
-    vector<int> tour;
-    vector<bool> visited(N, false);
-    int curr = 0;
-    tour.push_back(curr);
-    visited[curr] = true;
+    // Compute centroid of all cities to use as a deterministic alternative start point
+    double centroid_x = 0.0, centroid_y = 0.0;
+    for (const auto& p : cities) {
+        centroid_x += p.x;
+        centroid_y += p.y;
+    }
+    centroid_x /= N;
+    centroid_y /= N;
+    // Find the city farthest from the centroid
+    int farthest_city = 0;
+    double max_dist_sq = 0.0;
+    for (int i = 0; i < N; ++i) {
+        double dx = cities[i].x - centroid_x;
+        double dy = cities[i].y - centroid_y;
+        double dist_sq = dx * dx + dy * dy;
+        if (dist_sq > max_dist_sq) {
+            max_dist_sq = dist_sq;
+            farthest_city = i;
+        }
+    }
 
-    for (int i = 1; i < N; i++) {
-        int best_next = -1;
-        double min_d = 1e18;
-        for (int j = 0; j < N; j++) {
-            if (!visited[j]) {
-                double d = dist(cities[curr], cities[j]);
-                if (d < min_d) {
-                    min_d = d;
-                    best_next = j;
+    const int restart_count = 3;
+    vector<int> best_tour;
+    double best_dist = numeric_limits<double>::infinity();
+
+    for (int restart = 0; restart < restart_count; ++restart) {
+        vector<int> tour;
+        vector<bool> visited(N, false);
+
+        int start_city;
+        if (restart == 0) {
+            start_city = farthest_city;
+        } else {
+            // pick random start
+            static std::mt19937 rng(42);
+            static std::uniform_int_distribution<int> dist_start(0, N - 1);
+            start_city = dist_start(rng);
+        }
+
+        int curr = start_city;
+        tour.push_back(curr);
+        visited[curr] = true;
+
+        for (int i = 1; i < N; ++i) {
+            int best_next = -1;
+            double min_d = 1e18;
+            for (int j = 0; j < N; ++j) {
+                if (!visited[j]) {
+                    double d = dist(cities[curr], cities[j]);
+                    if (d < min_d) {
+                        min_d = d;
+                        best_next = j;
+                    }
+                }
+            }
+            tour.push_back(best_next);
+            visited[best_next] = true;
+            curr = best_next;
+        }
+
+        // 2-Opt Optimization (Untwisting the loop)
+        bool improved = true;
+        while (improved) {
+            improved = false;
+            for (int i = 1; i < N - 1; i++) {
+                for (int j = i + 1; j < N; j++) {
+                    double old_dist = dist(cities[tour[i-1]], cities[tour[i]]) 
+                                    + dist(cities[tour[j]], cities[tour[(j+1)%N]]);
+                    double new_dist = dist(cities[tour[i-1]], cities[tour[j]]) 
+                                    + dist(cities[tour[i]], cities[tour[(j+1)%N]]);
+                    if (new_dist < old_dist) {
+                        reverse(tour.begin() + i, tour.begin() + j + 1);
+                        improved = true;
+                    }
                 }
             }
         }
-        tour.push_back(best_next);
-        visited[best_next] = true;
-        curr = best_next;
+
+        double current_dist = 0.0;
+        for (int i = 0; i < N; ++i) {
+            current_dist += dist(cities[tour[i]], cities[tour[(i+1)%N]]);
+        }
+
+        if (current_dist < best_dist) {
+            best_dist = current_dist;
+            best_tour = tour;
+        }
     }
+
+    return best_tour;
 
     // 2. 2-Opt Optimization (Untwisting the loop)
     bool improved = true;
@@ -75,35 +151,6 @@ vector<int> solve_tsp(int N, const vector<Point>& cities) {
         }
     }
     
-    // Random segment reversal to escape local optima
-    if (N > 3) {
-        std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
-        std::uniform_int_distribution<int> dist_i(1, N - 3);
-        std::uniform_int_distribution<int> dist_j(2, N - 2);
-        int i = dist_i(rng);
-        int j = dist_j(rng);
-        if (i >= j) std::swap(i, j);
-        reverse(tour.begin() + i, tour.begin() + j + 1);
-    }
-
-    // Reapply 2-Opt after random perturbation
-    bool improved = true;
-    while (improved) {
-        improved = false;
-        for (int i = 1; i < N - 1; i++) {
-            for (int j = i + 1; j < N; j++) {
-                double old_dist = dist(cities[tour[i - 1]], cities[tour[i]]) 
-                                + dist(cities[tour[j]], cities[tour[(j + 1) % N]]);
-                double new_dist = dist(cities[tour[i - 1]], cities[tour[j]]) 
-                                + dist(cities[tour[i]], cities[tour[(j + 1) % N]]);
-                if (new_dist < old_dist) {
-                    reverse(tour.begin() + i, tour.begin() + j + 1);
-                    improved = true;
-                }
-            }
-        }
-    }
-
     return tour;
 }
 // EVOLVE-BLOCK-END
