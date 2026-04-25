@@ -3,7 +3,7 @@
 #include <cmath>
 #include <algorithm>
 #include <random>
-#include <limits>
+#include <chrono>
 
 using namespace std;
 
@@ -13,8 +13,7 @@ struct Point {
 
 // Helper: Euclidean distance
 double dist(const Point& a, const Point& b) {
-    // Return true Euclidean distance
-    return sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y));
+    return sqrt(pow(a.x - b.x, 2) + pow(a.y - b.y, 2));
 }
 
 // Helper: Calculate the total cost of the closed loop
@@ -29,72 +28,83 @@ double get_tour_distance(int N, const vector<int>& tour, const vector<Point>& ci
 // EVOLVE-BLOCK-START
 vector<int> solve_tsp(int N, const vector<Point>& cities) {
     if (N == 0) return {};
+    
+    // 1. Initial Greedy Tour (Nearest Neighbor)
+    vector<int> tour;
+    vector<bool> visited(N, false);
+    int curr = 0;
+    tour.push_back(curr);
+    visited[curr] = true;
 
-    const int restarts = 3;
-    vector<int> best_tour;
-    double best_dist = numeric_limits<double>::infinity();
-    std::mt19937 rng(std::random_device{}());
-
-    for (int r = 0; r < restarts; ++r) {
-        vector<int> tour;
-        vector<bool> visited(N, false);
-        int curr = rng() % N;
-        tour.push_back(curr);
-        visited[curr] = true;
-
-        for (int i = 1; i < N; ++i) {
-            int best_next = -1;
-            double min_d = numeric_limits<double>::infinity();
-            for (int j = 0; j < N; ++j) {
-                if (!visited[j]) {
-                    double d = dist(cities[curr], cities[j]);
-                    if (d < min_d) {
-                        min_d = d;
-                        best_next = j;
-                    }
-                }
-            }
-            tour.push_back(best_next);
-            visited[best_next] = true;
-            curr = best_next;
-        // Random shake to escape local optimum
-        const int shake_iters = 5;
-        for (int s = 0; s < shake_iters; ++s) {
-            int i = rng() % (N - 1) + 1;
-            int j = rng() % (N - 1) + 1;
-            if (i > j) swap(i, j);
-            double old_dist = dist(cities[tour[i-1]], cities[tour[i]]) +
-                              dist(cities[tour[j]], cities[tour[(j+1)%N]]);
-            double new_dist = dist(cities[tour[i-1]], cities[tour[j]]) +
-                              dist(cities[tour[i]], cities[tour[(j+1)%N]]);
-            if (new_dist < old_dist) reverse(tour.begin() + i, tour.begin() + j + 1);
-        }
-        double cur_dist = 0;
-
-        bool improved = true;
-        while (improved) {
-            improved = false;
-            for (int i = 1; i < N - 1; ++i) {
-                for (int j = i + 1; j < N; ++j) {
-                    double old_dist = dist(cities[tour[i-1]], cities[tour[i]]) 
-                                    + dist(cities[tour[j]], cities[tour[(j+1)%N]]);
-                    double new_dist = dist(cities[tour[i-1]], cities[tour[j]]) 
-                                    + dist(cities[tour[i]], cities[tour[(j+1)%N]]);
-                    if (new_dist < old_dist) {
-                        reverse(tour.begin() + i, tour.begin() + j + 1);
-                        improved = true;
-                    }
+    for (int i = 1; i < N; i++) {
+        int best_next = -1;
+        double min_d = 1e18;
+        for (int j = 0; j < N; j++) {
+            if (!visited[j]) {
+                double d = dist(cities[curr], cities[j]);
+                if (d < min_d) {
+                    min_d = d;
+                    best_next = j;
                 }
             }
         }
+        tour.push_back(best_next);
+        visited[best_next] = true;
+        curr = best_next;
+    }
 
-        double cur_dist = get_tour_distance(N, tour, cities); // use helper for consistency
-        if (cur_dist < best_dist) {
-            best_dist = cur_dist;
-            best_tour = tour;
+    // 2. 2-Opt Optimization (Untwisting the loop)
+    bool improved = true;
+    while (improved) {
+        improved = false;
+        for (int i = 1; i < N - 1; i++) {
+            for (int j = i + 1; j < N; j++) {
+                // Check if swapping edges (i-1, i) and (j, j+1) reduces distance
+                // Current edges: (i-1 -> i) and (j -> j+1)
+                // New edges: (i-1 -> j) and (i -> j+1)
+                double old_dist = dist(cities[tour[i-1]], cities[tour[i]]) 
+                                + dist(cities[tour[j]], cities[tour[(j+1)%N]]);
+                double new_dist = dist(cities[tour[i-1]], cities[tour[j]]) 
+                                + dist(cities[tour[i]], cities[tour[(j+1)%N]]);
+                
+                if (new_dist < old_dist) {
+                    reverse(tour.begin() + i, tour.begin() + j + 1);
+                    improved = true;
+                }
+            }
         }
     }
-    return best_tour;
+    
+    // Random segment reversal to escape local optima
+    if (N > 3) {
+        std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
+        std::uniform_int_distribution<int> dist_i(1, N - 3);
+        std::uniform_int_distribution<int> dist_j(2, N - 2);
+        int i = dist_i(rng);
+        int j = dist_j(rng);
+        if (i >= j) std::swap(i, j);
+        reverse(tour.begin() + i, tour.begin() + j + 1);
+    }
+
+    // Reapply 2-Opt after random perturbation
+    bool improved = true;
+    while (improved) {
+        improved = false;
+        for (int i = 1; i < N - 1; i++) {
+            for (int j = i + 1; j < N; j++) {
+                double old_dist = dist(cities[tour[i - 1]], cities[tour[i]]) 
+                                + dist(cities[tour[j]], cities[tour[(j + 1) % N]]);
+                double new_dist = dist(cities[tour[i - 1]], cities[tour[j]]) 
+                                + dist(cities[tour[i]], cities[tour[(j + 1) % N]]);
+                if (new_dist < old_dist) {
+                    reverse(tour.begin() + i, tour.begin() + j + 1);
+                    improved = true;
+                }
+            }
+        }
+    }
+
+    return tour;
 }
 // EVOLVE-BLOCK-END
 

@@ -2,9 +2,8 @@
 #include <vector>
 #include <cmath>
 #include <algorithm>
+#include <numeric>
 #include <random>
-#include <limits>
-static std::mt19937 rng(std::random_device{}());
 
 using namespace std;
 
@@ -14,7 +13,36 @@ struct Point {
 
 // Helper: Euclidean distance
 double dist(const Point& a, const Point& b) {
-    return hypot(a.x - b.x, a.y - b.y);
+    double dx = a.x - b.x;
+    double dy = a.y - b.y;
+    return sqrt(dx*dx + dy*dy); // used only for final tour length
+}
+ 
+// Squared Euclidean distance for fast comparisons
+inline double dist2(const Point& a, const Point& b) {
+    double dx = a.x - b.x;
+    double dy = a.y - b.y;
+    return dx*dx + dy*dy;
+}
+ 
+void two_opt(vector<int>& tour, const vector<Point>& cities) {
+    int N = tour.size();
+    bool improved = true;
+    while (improved) {
+        improved = false;
+        for (int i = 1; i < N - 1; i++) {
+            for (int j = i + 1; j < N; j++) {
+                double old_dist = dist(cities[tour[i-1]], cities[tour[i]]) 
+                                + dist(cities[tour[j]], cities[tour[(j+1)%N]]);
+                double new_dist = dist(cities[tour[i-1]], cities[tour[j]]) 
+                                + dist(cities[tour[i]], cities[tour[(j+1)%N]]);
+                if (new_dist < old_dist) {
+                    reverse(tour.begin() + i, tour.begin() + j + 1);
+                    improved = true;
+                }
+            }
+        }
+    }
 }
 
 // Helper: Calculate the total cost of the closed loop
@@ -26,109 +54,69 @@ double get_tour_distance(int N, const vector<int>& tour, const vector<Point>& ci
     return total;
 }
 
-
-
 // EVOLVE-BLOCK-START
 vector<int> solve_tsp(int N, const vector<Point>& cities) {
     if (N == 0) return {};
+    
+    // 1. Initial Greedy Tour (Nearest Neighbor)
+    vector<int> tour;
+    vector<bool> visited(N, false);
+    int curr = 0;
+    tour.push_back(curr);
+    visited[curr] = true;
 
-    // Multi‑restart framework
-    const int MAX_RESTARTS = 3;
-    vector<int> best_tour;
-    double best_total = std::numeric_limits<double>::infinity();
-
-    static std::mt19937 rng(std::random_device{}());
-    std::uniform_int_distribution<int> dist_start(0, N - 1);
-
-    for (int attempt = 0; attempt < MAX_RESTARTS; ++attempt) {
-        // 1. Initial Greedy Tour (Nearest Neighbor)
-        vector<int> tour;
-        vector<bool> visited(N, false);
-        int curr = (N > 5000) ? 0 : dist_start(rng); // deterministic for very large cases
-        tour.push_back(curr);
-        visited[curr] = true;
-
-        for (int i = 1; i < N; ++i) {
-            int best_next = -1;
-            double min_d = 1e18;
-            for (int j = 0; j < N; ++j) {
-                if (!visited[j]) {
-                    double d = dist(cities[curr], cities[j]);
-                    if (d < min_d) {
-                        min_d = d;
-                        best_next = j;
-                    }
-                }
-            }
-            tour.push_back(best_next);
-            visited[best_next] = true;
-            curr = best_next;
-        }
-
-        // 2. 2‑Opt Optimization (limited passes)
-        const int MAX_PASSES = 10; // reduce runtime while still improving
-        int passes = 0;
-        while (passes < MAX_PASSES) {
-            bool improved = false;
-            for (int i = 1; i < N - 1; ++i) {
-                for (int j = i + 1; j < N; ++j) {
-                    double old_dist = dist(cities[tour[i-1]], cities[tour[i]]) 
-                                    + dist(cities[tour[j]], cities[tour[(j+1)%N]]);
-                    double new_dist = dist(cities[tour[i-1]], cities[tour[j]]) 
-                                    + dist(cities[tour[i]], cities[tour[(j+1)%N]]);
-                    if (new_dist < old_dist) {
-                        reverse(tour.begin() + i, tour.begin() + j + 1);
-                        improved = true;
-                    }
-                }
-                if (improved) break;
-            }
-            if (!improved) break;
-            ++passes;
-        }
-
-        // 3. Relocation optimization (delta‑based) for small instances
-        const int RELOC_THRESHOLD = 2000;
-        if (N <= RELOC_THRESHOLD) {
-            double current_total = get_tour_distance(N, tour, cities);
-            bool moved = true;
-            while (moved) {
-                moved = false;
-                for (int i = 0; i < N && !moved; ++i) {
-                    int city = tour[i];
-                    int prev = tour[(i - 1 + N) % N];
-                    int next = tour[(i + 1) % N];
-                    double remove_delta = -dist(cities[prev], cities[city])
-                                        - dist(cities[city], cities[next])
-                                        + dist(cities[prev], cities[next]);
-
-                    vector<int> temp = tour;
-                    temp.erase(temp.begin() + i);
-
-                    for (int j = 0; j < N - 1; ++j) {
-                        int before = temp[(j - 1 + N - 1) % (N - 1)];
-                        int after  = temp[j % (N - 1)];
-                        double insert_delta = dist(cities[before], cities[city])
-                                            + dist(cities[city], cities[after])
-                                            - dist(cities[before], cities[after]);
-
-                        double new_total = current_total + remove_delta + insert_delta;
-                        if (new_total + 1e-9 < current_total) {
-                            temp.insert(temp.begin() + j, city);
-                            tour = temp;
-                            current_total = new_total;
-                            moved = true;
-                            break;
-                        }
-                    }
+    for (int i = 1; i < N; i++) {
+        int best_next = -1;
+        double min_d = 1e18;
+        for (int j = 0; j < N; j++) {
+            if (!visited[j]) {
+                double d = dist(cities[curr], cities[j]);
+                if (d < min_d) {
+                    min_d = d;
+                    best_next = j;
                 }
             }
         }
+        tour.push_back(best_next);
+        visited[best_next] = true;
+        curr = best_next;
+    }
 
-        double total = get_tour_distance(N, tour, cities);
-        if (total < best_total) {
-            best_total = total;
-            best_tour = tour;
+    // 2. 2-Opt Optimization (Untwisting the loop)
+    bool improved = true;
+    while (improved) {
+        improved = false;
+        for (int i = 1; i < N - 1; i++) {
+            for (int j = i + 1; j < N; j++) {
+                // Check if swapping edges (i-1, i) and (j, j+1) reduces distance
+                // Current edges: (i-1 -> i) and (j -> j+1)
+                // New edges: (i-1 -> j) and (i -> j+1)
+                double old_dist = dist(cities[tour[i-1]], cities[tour[i]]) 
+                                + dist(cities[tour[j]], cities[tour[(j+1)%N]]);
+                double new_dist = dist(cities[tour[i-1]], cities[tour[j]]) 
+                                + dist(cities[tour[i]], cities[tour[(j+1)%N]]);
+                
+                if (new_dist < old_dist) {
+                    reverse(tour.begin() + i, tour.begin() + j + 1);
+                    improved = true;
+                }
+            }
+        }
+    }
+    
+    // Random restarts to escape local minima
+    double best_dist = get_tour_distance(N, tour, cities);
+    vector<int> best_tour = tour;
+    std::mt19937 rng(std::random_device{}());
+    for (int restart = 0; restart < 3; ++restart) {
+        std::vector<int> rand_tour(N);
+        std::iota(rand_tour.begin(), rand_tour.end(), 0);
+        std::shuffle(rand_tour.begin(), rand_tour.end(), rng);
+        two_opt(rand_tour, cities);
+        double dist_val = get_tour_distance(N, rand_tour, cities);
+        if (dist_val < best_dist) {
+            best_dist = dist_val;
+            best_tour = rand_tour;
         }
     }
     return best_tour;
