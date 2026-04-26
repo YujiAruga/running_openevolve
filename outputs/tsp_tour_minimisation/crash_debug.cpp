@@ -1,10 +1,7 @@
 #include <iostream>
 #include <vector>
-
+#include <cmath>
 #include <algorithm>
-#include <random>
-#include <limits>
-#include <chrono>
 
 using namespace std;
 
@@ -14,143 +11,94 @@ struct Point {
 
 // Helper: Euclidean distance
 double dist(const Point& a, const Point& b) {
-    double dx = a.x - b.x;
-    double dy = a.y - b.y;
-    return sqrt(dx*dx + dy*dy);
+    return sqrt(pow(a.x - b.x, 2) + pow(a.y - b.y, 2));
 }
 
-// Euclidean distance with sqrt
-# Remove unused helper
-
-# remove unused improve_2opt function
-
-double tour_distance(const vector<int>& tour, const vector<Point>& cities) {
-    double total = 0.0;
-    int N = tour.size();
+// Helper: Calculate the total cost of the closed loop
+double get_tour_distance(int N, const vector<int>& tour, const vector<Point>& cities) {
+    double total = 0;
     for (int i = 0; i < N; ++i) {
-        total += dist(cities[tour[i]], cities[tour[(i+1)%N]]);
+        double dx = cities[tour[i]].x - cities[tour[(i + 1) % N]].x;
+        double dy = cities[tour[i]].y - cities[tour[(i + 1) % N]].y;
+        total += sqrt(dx * dx + dy * dy);
     }
     return total;
 }
 
-
 // EVOLVE-BLOCK-START
 vector<int> solve_tsp(int N, const vector<Point>& cities) {
     if (N == 0) return {};
-    
-    // Compute centroid of all cities to use as a deterministic alternative start point
-    double centroid_x = 0.0, centroid_y = 0.0;
-    for (const auto& p : cities) {
-        centroid_x += p.x;
-        centroid_y += p.y;
-    }
-    centroid_x /= N;
-    centroid_y /= N;
-    // Find the city farthest from the centroid
-    int farthest_city = 0;
-    double max_dist_sq = 0.0;
-    for (int i = 0; i < N; ++i) {
-        double dx = cities[i].x - centroid_x;
-        double dy = cities[i].y - centroid_y;
-        double dist_sq = dx * dx + dy * dy;
-        if (dist_sq > max_dist_sq) {
-            max_dist_sq = dist_sq;
-            farthest_city = i;
-        }
-    }
 
-    const int restart_count = 3;
-    vector<int> best_tour;
-    double best_dist = numeric_limits<double>::infinity();
+    // No dense distance matrix is used; distances are computed on demand via dist()
 
-    for (int restart = 0; restart < restart_count; ++restart) {
-        vector<int> tour;
-        vector<bool> visited(N, false);
+    // 1. Farthest‑Insertion Initial Tour
+    vector<int> tour;
+    vector<bool> visited(N, false);
+    tour.push_back(0);
+    visited[0] = true;
+    int visited_count = 1;
 
-        int start_city;
-        if (restart == 0) {
-            start_city = farthest_city;
-        } else {
-            // pick random start
-            static std::mt19937 rng(42);
-            static std::uniform_int_distribution<int> dist_start(0, N - 1);
-            start_city = dist_start(rng);
-        }
-
-        int curr = start_city;
-        tour.push_back(curr);
-        visited[curr] = true;
-
-        for (int i = 1; i < N; ++i) {
-            int best_next = -1;
-            double min_d = 1e18;
-            for (int j = 0; j < N; ++j) {
-                if (!visited[j]) {
-                    double d = dist(cities[curr], cities[j]);
-                    if (d < min_d) {
-                        min_d = d;
-                        best_next = j;
-                    }
-                }
+    while (visited_count < N) {
+        // Find the unvisited city with the largest distance to any visited city
+        int farthest_city = -1;
+        double max_min_dist = -1.0;
+        for (int c = 0; c < N; ++c) {
+            if (visited[c]) continue;
+            double min_to_visited = 1e18;
+            for (int v : tour) {
+                // use the helper dist() instead of a pre‑computed matrix
+                double d = distSq(cities[c], cities[v]);
+                if (d < min_to_visited)
+                    min_to_visited = d;
             }
-            tour.push_back(best_next);
-            visited[best_next] = true;
-            curr = best_next;
-        }
-
-        // 2-Opt Optimization (Untwisting the loop)
-        bool improved = true;
-        while (improved) {
-            improved = false;
-            for (int i = 1; i < N - 1; i++) {
-                for (int j = i + 1; j < N; j++) {
-                    double old_dist = dist(cities[tour[i-1]], cities[tour[i]]) 
-                                    + dist(cities[tour[j]], cities[tour[(j+1)%N]]);
-                    double new_dist = dist(cities[tour[i-1]], cities[tour[j]]) 
-                                    + dist(cities[tour[i]], cities[tour[(j+1)%N]]);
-                    if (new_dist < old_dist) {
-                        reverse(tour.begin() + i, tour.begin() + j + 1);
-                        improved = true;
-                    }
-                }
+            if (min_to_visited > max_min_dist) {
+                max_min_dist = min_to_visited;
+                farthest_city = c;
             }
         }
 
-        double current_dist = 0.0;
-        for (int i = 0; i < N; ++i) {
-            current_dist += dist(cities[tour[i]], cities[tour[(i+1)%N]]);
+        // Find best insertion position for the farthest city
+        int best_pos = 0;
+        double best_increase = 1e18;
+        int sz = tour.size();
+        for (int i = 0; i < sz; ++i) {
+            int next = (i + 1) % sz;
+            double old_edge = distSq(cities[tour[i]], cities[tour[next]]);
+            double new_edges = distSq(cities[tour[i]], cities[farthest_city]) +
+                               distSq(cities[farthest_city], cities[tour[next]]);
+            double increase = new_edges - old_edge;
+            if (increase < best_increase) {
+                best_increase = increase;
+                best_pos = next;
+            }
         }
-
-        if (current_dist < best_dist) {
-            best_dist = current_dist;
-            best_tour = tour;
-        }
+        tour.insert(tour.begin() + best_pos, farthest_city);
+        visited[farthest_city] = true;
+        ++visited_count;
     }
 
-    return best_tour;
-
-    // 2. 2-Opt Optimization (Untwisting the loop)
+    // 2. 2‑Opt Optimization using squared distances for comparisons
+    // Limit 2‑Opt iterations to avoid excessive runtime on large instances
+    const int max_passes = 3;
+    int passes = 0;
     bool improved = true;
-    while (improved) {
+    while (improved && passes < max_passes) {
         improved = false;
-        for (int i = 1; i < N - 1; i++) {
-            for (int j = i + 1; j < N; j++) {
-                // Check if swapping edges (i-1, i) and (j, j+1) reduces distance
-                // Current edges: (i-1 -> i) and (j -> j+1)
-                // New edges: (i-1 -> j) and (i -> j+1)
-                double old_dist = dist(cities[tour[i-1]], cities[tour[i]]) 
-                                + dist(cities[tour[j]], cities[tour[(j+1)%N]]);
-                double new_dist = dist(cities[tour[i-1]], cities[tour[j]]) 
-                                + dist(cities[tour[i]], cities[tour[(j+1)%N]]);
-                
+        for (int i = 1; i < N - 1; ++i) {
+            for (int j = i + 1; j < N; ++j) {
+                double old_dist = distSq(cities[tour[i-1]], cities[tour[i]]) +
+                                  distSq(cities[tour[j]], cities[tour[(j+1)%N]]);
+                double new_dist = distSq(cities[tour[i-1]], cities[tour[j]]) +
+                                  distSq(cities[tour[i]], cities[tour[(j+1)%N]]);
                 if (new_dist < old_dist) {
                     reverse(tour.begin() + i, tour.begin() + j + 1);
                     improved = true;
                 }
             }
         }
+        ++passes;
     }
-    
+
     return tour;
 }
 // EVOLVE-BLOCK-END
