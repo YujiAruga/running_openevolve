@@ -68,6 +68,6 @@ def parse_openevolve_logs(log_file_path, output_csv):
     print(f"Successfully extracted {len(data_points)} data points to {output_csv}")
 
 # Updated path based on your latest log snippet
-log_path = "examples/tsp/openevolve_output/logs/openevolve_20260425_184932.log"
+log_path = "examples/tsp/openevolve_output/logs/openevolve_20260426_003959.log"
 output_path = "examples/tsp/openevolve_output/fitness_history.csv"
 parse_openevolve_logs(log_path, output_path)
